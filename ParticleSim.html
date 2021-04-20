@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Particle Simulator Extension</title>
+</head>
+<body>
+
+<div>
+  <button id="button-start" type="button">Start</button>
+  <button id="button-stop" type="button">Stop</button>
+  <button id="button-new-particle" type="button">New Particle</button>
+  <button id="button-restart" type="button">Return Particles</button>
+</div>
+
+<div>
+  <button id="button-random-velocity" type="button">Randomly Increase Velocity</button>
+  <button id="button-random-slowdown" type="button">Randomly Decrease Velocity</button>
+  <button id="button-delete-particles" type="button">Delete All Extra Particles</button>
+</div>
+
+<div>
+  <label for="ID_WIND_FORCE_X">Wind Force X</label>
+  <input id="ID_WIND_FORCE_X" type="range" min="-10" max="10" value="0">
+</div>
+
+
+<div>
+  <label for="ID_WIND_FORCE_Y">Wind Force Y</label>
+  <input id="ID_WIND_FORCE_Y" type="range" min="-10" max="10" value="0">
+</div>
+
+<canvas id="myCanvas" width="600" height="600" style="border:2px solid #d3d3d3;">
+Your browser does not support the HTML5 canvas tag.</canvas>
+
+<script src="Particle.js"></script>
+
+<script>
+
+var count = 1;
+var canvas = document.getElementById("myCanvas");
+var ctx = canvas.getContext("2d");
+
+var inMotion = false;
+var returning = false;
+
+let particle = new Particle(canvas.width/2, 0,Math.random()*5+0.1, count);
+
+var particles = [particle];
+
+var gravity = {
+  accX: 0.0, accY: 9.8 };
+
+var wind = {
+	forceX: 2.0, forceY: 0.0
+};
+
+
+var timePrevious = Date.now();
+var elapsedTimeSeconds = 0;
+
+document.getElementById("ID_WIND_FORCE_X").addEventListener("change", onChangeWindX);
+document.getElementById("ID_WIND_FORCE_Y").addEventListener("change", onChangeWindY);
+document.getElementById("button-new-particle").addEventListener("click", onAddParticle);
+document.getElementById("button-restart").addEventListener("click", onReturnParticles);
+document.getElementById("button-start").addEventListener("click", onStart);
+document.getElementById("button-stop").addEventListener("click", onStop);
+document.getElementById("button-random-velocity").addEventListener("click", onRandomVelocity);
+document.getElementById("button-delete-particles").addEventListener("click", onDeleteParticles);
+document.getElementById("button-random-slowdown").addEventListener("click", onSlowdownVelocity);
+
+repaintParticles();
+repaint();
+
+function repaint() {
+  let timeNow = Date.now();
+  elapsedTimeSeconds = (timeNow - timePrevious)/1000.0;
+  timePrevious = timeNow;
+  if (inMotion) {
+    repaintParticles();
+  } else if (returning) {
+    returnParticles();
+  }
+  window.requestAnimationFrame(repaint);
+}
+
+function repaintParticles() {
+  ctx.clearRect(0,0, canvas.width, canvas.height);
+  for (i = 0; i < particles.length; i++) {
+    particles[i].paint(ctx);
+  }
+
+  for (i = 0; i < particles.length; i++) {
+    let p = particles[i];
+    p.update(elapsedTimeSeconds);
+  	let windAccX = forceToAccel(wind.forceX, p.mass);
+  	let windAccY = forceToAccel(wind.forceY, p.mass);
+    let addedForce = forceToAccel();
+    p.setAcceleration(gravity.accX + windAccX, gravity.accY + windAccY);
+
+    if (p.posX < 0) {
+      p.posX = 1;
+      p.flipSpeedX();
+    }
+    if (p.posX > canvas.width) {
+      p.posX = canvas.width - 1;
+      p.flipSpeedX();
+    }
+    if (p.posY < 0) {
+      p.posY = 1;
+      p.flipSpeedY();
+    }
+    if (p.posY > canvas.height) {
+      p.posY = canvas.height - 1;
+      p.flipSpeedY();
+    }
+  }
+}
+
+function onChangeWindX(evt) {
+  wind.forceX = evt.target.value;
+}
+
+function onChangeWindY(evt) {
+  wind.forceY = evt.target.value;
+}
+
+function onAddParticle() {
+  if (returning) {
+    return;
+  }
+  count++;
+  let newParticle = new Particle(canvas.width/2, 0,Math.random()*5+0.1,count);
+  newParticle.paint(ctx);
+  particles.push(newParticle);
+}
+
+function onReturnParticles() {
+  inMotion = false;
+  returning = true;
+  for (i = 0; i < particles.length; i++) {
+    particles[i].posX = Math.floor(particles[i].posX)*1.0;
+    particles[i].posY = Math.floor(particles[i].posY)*1.0;
+    particles[i].posX -= particles[i].posX % 10;
+    particles[i].posY -= particles[i].posY % 10;
+  }
+}
+
+function returnParticles() {
+  if (!particlesReturned()) {
+    ctx.clearRect(0,0, canvas.width, canvas.height);
+    for (i = 0; i < particles.length; i++) {
+      let p = particles[i];
+      if (p.posX > canvas.width/2) {
+        p.posX = p.posX - 10;
+      } else if (p.posX < canvas.width/2) {
+        p.posX = p.posX + 10;
+      }
+      if (p.posY > 0) {
+        p.posY = p.posY - 10;
+      } else if (p.posY < 0) {
+        p.posY = p.posY + 10;
+      }
+      p.paint(ctx);
+    }
+  } else {
+    for (i = 0; i < particles.length; i++) {
+      particles[i].restartSpeed();
+    }
+    repaintParticles();
+    returning = false;
+  }
+}
+
+
+function particlesReturned() {
+  for (i = 0; i < particles.length; i++) {
+    if (particles[i].posX != canvas.width/2 || particles[i].posY != 0) {
+      return false;
+    }
+  }
+  return true;
+}
+
+function onStart() {
+  if (returning) {
+    return;
+  }
+  inMotion = true;
+}
+
+function onStop() {
+  if (returning) {
+    return;
+  }
+  inMotion = false;
+}
+
+function onDeleteParticles() {
+  if (count == 1 || returning) {
+    return;
+  }
+  count = 1;
+  particles = [particles[0]];
+  onReturnParticles();
+}
+
+function onRandomVelocity() {
+  if (returning) {
+    return;
+  }
+  for (i = 0; i < particles.length; i++) {
+    particles[i].velX = particles[i].velX * (Math.random()*1.9 + 1.1);
+    particles[i].velY = particles[i].velY * (Math.random()*1.9 + 1.1);
+  }
+}
+
+function onSlowdownVelocity() {
+  if (returning) {
+    return;
+  }
+  for (i = 0; i < particles.length; i++) {
+    particles[i].velX = particles[i].velX * (Math.random()*0.89 + 0.1);
+    particles[i].velY = particles[i].velY * (Math.random()*0.89 + 0.1);
+  }
+}
+
+function forceToAccel(force, mass) {
+  // force = mass x acceleration
+  return force / mass;
+}
+
+</script>
+
+</body>
+</html>
